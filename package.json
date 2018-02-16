@@ -1,0 +1,23 @@
+{
+  "name": "coinblocks",
+  "version": "1.0.0",
+  "description": "An event notifier for crypto currencies, supports btc-like coins and eth-like coins",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "block",
+    "notify",
+    "bitcoin",
+    "ethereum",
+    "events"
+  ],
+  "author": "unibtc@gmail.com",
+  "license": "MIT",
+  "dependencies": {
+    "bitcoin": "^3.0.1",
+    "eventemitter3": "^3.0.1",
+    "web3": "^0.20.5"
+  }
+}
