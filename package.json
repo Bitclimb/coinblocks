@@ -1,6 +1,6 @@
 {
   "name": "coinblocks",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "An event notifier for crypto currencies, supports btc-like coins and eth coins",
   "main": "index.js",
   "scripts": {
