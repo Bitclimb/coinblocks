@@ -50,11 +50,12 @@ module.exports = class BlockNotify extends EventEmitter {
         this.ethfilter = this.rpc.eth.filter('latest');
         this.ethfilter.watch(async (error, result) => {
           if (!error) {
-            const r = await this.rpc.eth.getBlock(result, true);
-            if (this.blocks[coin].height < r.number) {
-              this.blocks[coin].height = r.number;
-              this._emit(coin, r);
-            }
+            this.rpc.eth.getBlock(result, true, (err, r) => {
+              if (this.blocks[coin].height < r.number) {
+                this.blocks[coin].height = r.number;
+                this._emit(coin, r);
+              }
+            });
           }
         });
       } else {
