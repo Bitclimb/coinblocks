@@ -1,5 +1,5 @@
 const EventEmitter = require('eventemitter3');
-const bitcoin = require('bitcoin');
+const Client = require('bitcoin-core');
 const Web3 = require('web3');
 
 module.exports = class BlockNotify extends EventEmitter {
@@ -13,77 +13,69 @@ module.exports = class BlockNotify extends EventEmitter {
     this.opts = opts;
   }
   async start () {
+    const self = this;
     setImmediate(async () => {
-      for (const opts of this.opts) {
-        this.coins.push(opts.coin);
+      for (const opts of self.opts) {
+        self.coins.push(opts.coin);
         if (opts.family == 'btc') {
-          this.rpc[opts.coin] = new bitcoin.Client(opts.rpc);
+          self.rpc[opts.coin] = new Client(opts.rpc);
         } else if (opts.family == 'eth') {
-          this.rpc[opts.coin] = new Web3(new Web3.providers.HttpProvider(`http://${opts.rpc.host}:${opts.rpc.port}`)).eth;
+          self.rpc[opts.coin] = new Web3(`ws://${opts.rpc.host}:${opts.rpc.port}`);
         }
-        this.blocks[opts.coin] = await this.getLatestBlock(opts.coin);
+        self.blocks[opts.coin] = await self.getLatestBlock(opts.coin);
       }
-      await this._listen();
+      await self._listen();
     });
   }
-  getLatestBlock (coin) {
+  async getLatestBlock (coin) {
+    const self = this;
+    let res;
     if (coin !== 'eth') {
-      return new Promise((resolve, reject) => {
-        this.rpc[coin].cmd('getblockchaininfo', (err, res) => {
-          if (err) reject(err);
-          resolve({ height: res.blocks, hash: res.bestblockhash });
-        });
-      });
+      res = await self.rpc[coin].command('getblockchaininfo');
+      return { height: res.blocks, hash: res.bestblockhash };
     } else {
-      return new Promise((resolve, reject) => {
-        this.rpc[coin].getBlockNumber((err, res) => {
-          if (err) reject(err);
-          resolve({ height: res });
-        });
-      });
+      res = await self.rpc[coin].eth.getBlockNumber();
+      return { height: res };
     }
   }
   async _listen () {
-    for (const coin of this.coins) {
+    const self = this;
+    for (const coin of self.coins) {
       if (coin == 'eth') {
         console.log('Listening for new blocks started for', coin);
-        this.ethfilter = this.rpc.eth.filter('latest');
-        this.ethfilter.watch(async (error, result) => {
-          if (!error) {
-            this.rpc.eth.getBlock(result, true, (err, r) => {
-              if (!err) {
-                if (this.blocks[coin].height < r.number) {
-                  this.blocks[coin].height = r.number;
-                  this._emit(coin, r);
-                }
-              } else {
-                console.error(err);
-              }
-            });
+        self.ethfilter = self.rpc[coin].eth.subscribe('newBlockHeaders');
+        self.ethfilter.on('data', async result => {
+          if (self.blocks[coin].height < result.number) {
+            const r = await self.rpc[coin].eth.getBlock(result.number, true);
+            self.blocks[coin].height = r.number;
+            self._emit(coin, r);
           }
+        });
+        self.ethfilter.on('error', err => {
+          console.error(err);
         });
       } else {
         console.log('Listening for new blocks started for', coin);
-        this.timers[coin] = setInterval(async () => {
-          const blockinfo = await this.getLatestBlock(coin);
-          if (this.blocks[coin].height < blockinfo.height) {
-            this.blocks[coin].height = blockinfo.height;
-            this.blocks[coin].hash = blockinfo.hash;
-            this.rpc[coin].cmd('getblock', blockinfo.hash, (err, r) => {
-              if (!err) {
-                this._emit(coin, r);
-              }
-            });
+        self.timers[coin] = setInterval(async () => {
+          const blockinfo = await self.getLatestBlock(coin);
+          if (self.blocks[coin].height < blockinfo.height) {
+            self.blocks[coin].height = blockinfo.height;
+            self.blocks[coin].hash = blockinfo.hash;
+            const r = await self.rpc[coin].command('getblock', blockinfo.hash);
+            self._emit(coin, r);
           }
         }, 30 * 1000);
       }
     }
   }
   close () {
-    for (const timers of Object.values(this.timers)) {
+    const self = this;
+    for (const timers of Object.values(self.timers)) {
       clearInterval(timers);
     }
-    this.ethfilter.stopWatching();
+    self.ethfilter.unsubscribe((error, success) => {
+      if (success) { console.log('Successfully unsubscribed!'); }
+    });
     console.log('Coinblock stopped');
   }
   _emit (coin, blockObj) {
